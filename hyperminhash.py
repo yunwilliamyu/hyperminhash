@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 '''Used to run all HyperMinHash experiments'''
+import sys
+assert(sys.version_info.major >= 3)
+
 import hashlib
 import mmh3
 import numpy as np
 import math
 import os
 import copy
-import sys
 import decimal
 import time
+
 
 class HyperMinHash:
     '''Class that stores HyperMinHash sketch
