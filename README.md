@@ -2,7 +2,8 @@
 LogLog scaling version of MinHash by combining ideas from HyperLogLog and b-bit MinHash
 
 Please cite:
-Y. William Yu & Griffin Weber. HyperMinHash: Jaccard index sketching in LogLog space. (2017)
+Y. William Yu & Griffin Weber. HyperMinHash: Jaccard index sketching in LogLog space. (2017)  
+*Preprint: https://arxiv.org/abs/1710.08436*
 
 Code consists of a class hyperminhash.HyperMinHash that allows:
 * **\_\_init\_\_**: specify the size and parameters of the sketch
