@@ -96,8 +96,10 @@ class HyperMinHash:
         estimator given here:
         http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=365694
         
-        Will try the HLL estimator, and if the value is above 40M ~ 2^25, switches
+        Will try the HLL estimator, and if the value is above 2^(10 + bucketsize), switches
         to MinHash
+
+        Also uses MinHash estimator if bucketsize = 0
         '''
 
         hll_count = hll_estimator(self.hll)
