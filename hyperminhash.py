@@ -12,7 +12,40 @@ import copy
 import decimal
 import time
 import struct
+import bitstring
 
+def packbits(b, L):
+    '''Returns a bytestring corresponding to a packed array of integers, using at most b bits per integer. We prepend with a (b, len(L)) as 64-bit unsigned integers'''
+    assert(b <= 64)
+    params = struct.pack("<2Q", b, len(L))
+    array = bitstring.BitArray()
+    for x in L:
+        array += bitstring.BitArray(uint=x, length=b)
+    if len(L) % 8 != 0:
+        pad = 8 - (len(L) % 8)
+        array += bitstring.BitArray(uint=0, length=pad)
+    return params + array.bytes
+
+def unpackbits(X):
+    '''Returns a tuple (b, L) corresponding to a list of unsigned b-bit integers, from X'''
+    params = X[0:16]
+    b, length = struct.unpack("<2Q", params)
+    L = np.zeros(length, dtype=np.uint64)
+    array = bitstring.BitArray(X[16:])
+    array = bitstring.BitStream(array)
+    for i in range(length):
+        L[i] = array.read(b).uint
+    return (b, L)
+
+def num_bytes_packbits(b, n):
+    '''Returns number of bytes needed to pack n b-bit integers, plus two 64-bit integers'''
+    raw = b*n
+    if raw%8 != 0:
+        pad = 8 - (raw%8)
+    else:
+        pad = 0
+    padded_bytes = (raw + pad) //8
+    return 16 + padded_bytes
 
 class HyperMinHash:
     '''Class that stores HyperMinHash sketch
@@ -63,8 +96,10 @@ class HyperMinHash:
         '''Returns a Bytes object that can be reconstructed into a HyperMinHash sketch'''
         params = struct.pack("<3L", self.bucketbits, self.bucketsize, self.subbucketsize)
         cc = bytes(self.collision_correction[0], "utf-8")
-        hll_bytes = self.hll.tobytes()
-        bbit_bytes = self.bbit.tobytes()
+        #hll_bytes = self.hll.tobytes()
+        hll_bytes = packbits(self.bucketsize+1, self.hll)
+        #bbit_bytes = self.bbit.tobytes()
+        bbit_bytes = packbits(self.subbucketsize, self.bbit)
         ans = params + cc + hll_bytes + bbit_bytes
         #if self.bucketsize > 0:
         #    ans = params + cc + hll_bytes + bbit_bytes
@@ -86,13 +121,13 @@ class HyperMinHash:
         else:
             raise ValueError("Invalid collision_correction code in deserialization")
         obj = cls(bucketbits, bucketsize, subbucketsize, collision_correction)
-        obj.hll = np.frombuffer(byte_array, dtype=obj._hll_type, count=2**bucketbits, offset=13)
-        obj.bbit = np.frombuffer(byte_array, dtype=obj._subbucket_type, count=2**bucketbits, offset=13+2**bucketbits)
-        #if obj.bucketsize > 0:
-        #    obj.hll = np.frombuffer(byte_array, dtype=obj._hll_type, count=2**bucketbits, offset=13)
-        #    obj.bbit = np.frombuffer(byte_array, dtype=obj._subbucket_type, count=2**bucketbits, offset=13+2**bucketbits)
-        #else:
-        #    obj.bbit = np.frombuffer(byte_array, dtype=obj._subbucket_type, count=2**bucketbits, offset=13)
+        start_hll = 13
+        end_hll = start_hll + num_bytes_packbits(bucketsize+1, 2**bucketbits)
+        end_bbit = end_hll + num_bytes_packbits(subbucketsize, 2**bucketbits)
+        hll_b, hll_L = unpackbits(byte_array[start_hll:end_hll])
+        obj.hll = hll_L.astype(obj._hll_type)
+        bbit_b, bbit_L = unpackbits(byte_array[end_hll:end_bbit])
+        obj.bbit = bbit_L.astype(obj._subbucket_type)
         return obj
     def triple_hash(self, item):
         '''Returns a triple i, val, aug hashed values, where i is bucketbits,

@@ -3,6 +3,7 @@
 import unittest
 import numpy as np
 from hyperminhash import HyperMinHash
+from hyperminhash import packbits, unpackbits
 
 def is_within_relerr(x, ex, relerr):
     return (x * (1-relerr) <= ex <= x*(1+relerr))
@@ -91,6 +92,23 @@ class Test_Serialization1(BaseTestCases.TestSerialization):
 class Test_Serialization2(BaseTestCases.TestSerialization):
     def setUp(self):
         self.setUp_with_params(314159000, 5000, 6, 0, 8, "false")
+
+class Test_PackBits(unittest.TestCase):
+    def test_round_trip(self):
+        A=[32,15,55,29,100,121,4,3,23,56,56,78]
+        X=packbits(7,A)
+        (b, L) = unpackbits(X)
+        assert(b == 7)
+        A = np.array(A)
+        self.assertTrue(np.array_equal(A, L))
+    def test_round_trip2(self):
+        A=[32,15,55,29,100,121,4,3,23,56,56,78, 2,4,2,12,12,3,320, 232]
+        X=packbits(11,A)
+        (b, L) = unpackbits(X)
+        A = np.array(A)
+        self.assertTrue(np.array_equal(A, L))
+
+
 
 if __name__ == '__main__':
     unittest.main()
