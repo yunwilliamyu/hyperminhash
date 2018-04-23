@@ -21,8 +21,8 @@ def packbits(b, L):
     array = bitstring.BitArray()
     for x in L:
         array += bitstring.BitArray(uint=x, length=b)
-    if len(L) % 8 != 0:
-        pad = 8 - (len(L) % 8)
+    if len(array) % 8 != 0:
+        pad = 8 - (len(array) % 8)
         array += bitstring.BitArray(uint=0, length=pad)
     return params + array.bytes
 
