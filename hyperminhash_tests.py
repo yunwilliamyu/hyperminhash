@@ -75,15 +75,15 @@ class Test_HMH_1(BaseTestCases.TestHyperMinHash):
         
 class Test_HMH_2(BaseTestCases.TestHyperMinHash):
     def setUp(self):
-        self.setUp_with_params(314159001, 10000, 2000, 1000, 8, 6, 8, "false")
+        self.setUp_with_params(314159002, 10000, 2000, 1000, 8, 6, 8, "false")
         
 class Test_HMH_3(BaseTestCases.TestHyperMinHash):
     def setUp(self):
-        self.setUp_with_params(314159003, 10000, 2000, 1000, 8, 0, 8, "false")
+        self.setUp_with_params(314159005, 10000, 2000, 1000, 8, 0, 8, "false")
 
 class Test_HMH_4(BaseTestCases.TestHyperMinHash):
     def setUp(self):
-        self.setUp_with_params(314159006, 10000, 2000, 500, 8, 0, 10, "false")
+        self.setUp_with_params(314159004, 10000, 2000, 500, 8, 0, 10, "false")
 
 class Test_Serialization1(BaseTestCases.TestSerialization):
     def setUp(self):

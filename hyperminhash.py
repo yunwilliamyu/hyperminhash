@@ -134,7 +134,7 @@ class HyperMinHash:
         val is the position of the leading one in a 64-bit integer, and aug is the bits
         to go in the subbuckets'''
 
-        y, h2 = mmh3.hash64(bytes(item))
+        y, h2 = mmh3.hash64(str(item).encode())
         #val = 64 + 1 - (y + 2**63).bit_length() # this is slightly wrong as it will with 1/2^64 probability give 65
         val = 64 + 1 - int(np.uint64(y)).bit_length()
         val = min(val, 2**self.bucketsize)
