@@ -108,7 +108,7 @@ class HyperMinHash:
         return ans
     @classmethod
     def deserialize(cls, byte_array):
-        '''Unserializes a Bytes object that has been packed by export'''
+        '''Unserializes a Bytes object that has been packed by serialize'''
         params = byte_array[0:12]
         bucketbits, bucketsize, subbucketsize = struct.unpack("<3L", params)
         cc = byte_array[12:13].decode("utf-8")
