@@ -11,7 +11,41 @@ import os
 import copy
 import decimal
 import time
+import struct
+import bitstring
 
+def packbits(b, L):
+    '''Returns a bytestring corresponding to a packed array of integers, using at most b bits per integer. We prepend with a (b, len(L)) as 64-bit unsigned integers'''
+    assert(b <= 64)
+    params = struct.pack("<2Q", b, len(L))
+    array = bitstring.BitArray()
+    for x in L:
+        array += bitstring.BitArray(uint=x, length=b)
+    if len(array) % 8 != 0:
+        pad = 8 - (len(array) % 8)
+        array += bitstring.BitArray(uint=0, length=pad)
+    return params + array.bytes
+
+def unpackbits(X):
+    '''Returns a tuple (b, L) corresponding to a list of unsigned b-bit integers, from X'''
+    params = X[0:16]
+    b, length = struct.unpack("<2Q", params)
+    L = np.zeros(length, dtype=np.uint64)
+    array = bitstring.BitArray(X[16:])
+    array = bitstring.BitStream(array)
+    for i in range(length):
+        L[i] = array.read(b).uint
+    return (b, L)
+
+def num_bytes_packbits(b, n):
+    '''Returns number of bytes needed to pack n b-bit integers, plus two 64-bit integers'''
+    raw = b*n
+    if raw%8 != 0:
+        pad = 8 - (raw%8)
+    else:
+        pad = 0
+    padded_bytes = (raw + pad) //8
+    return 16 + padded_bytes
 
 class HyperMinHash:
     '''Class that stores HyperMinHash sketch
@@ -53,17 +87,54 @@ class HyperMinHash:
         self.subbucketsize = subbucketsize
         self.hll = np.zeros(2**bucketbits, dtype=self._hll_type)
         self.bbit = np.zeros(2**bucketbits, dtype=self._subbucket_type)
-
         self.collision_correction=collision_correction
+
         self._bbit_mask = 2**self.subbucketsize -1
         self._bucketbit_shift = 64 - self.bucketbits
         #self.buckets = [ (0,0) for _ in range(2**bucketbits)]
+    def serialize(self):
+        '''Returns a Bytes object that can be reconstructed into a HyperMinHash sketch'''
+        params = struct.pack("<3L", self.bucketbits, self.bucketsize, self.subbucketsize)
+        cc = bytes(self.collision_correction[0], "utf-8")
+        #hll_bytes = self.hll.tobytes()
+        hll_bytes = packbits(self.bucketsize+1, self.hll)
+        #bbit_bytes = self.bbit.tobytes()
+        bbit_bytes = packbits(self.subbucketsize, self.bbit)
+        ans = params + cc + hll_bytes + bbit_bytes
+        #if self.bucketsize > 0:
+        #    ans = params + cc + hll_bytes + bbit_bytes
+        #else:
+        #    ans = params + cc + bbit_bytes
+        return ans
+    @classmethod
+    def deserialize(cls, byte_array):
+        '''Unserializes a Bytes object that has been packed by serialize'''
+        params = byte_array[0:12]
+        bucketbits, bucketsize, subbucketsize = struct.unpack("<3L", params)
+        cc = byte_array[12:13].decode("utf-8")
+        if cc == 'a':
+            collision_correction="approx"
+        elif cc =='p':
+            collision_correction="precise"
+        elif cc == 'f':
+            collision_correction="false"
+        else:
+            raise ValueError("Invalid collision_correction code in deserialization")
+        obj = cls(bucketbits, bucketsize, subbucketsize, collision_correction)
+        start_hll = 13
+        end_hll = start_hll + num_bytes_packbits(bucketsize+1, 2**bucketbits)
+        end_bbit = end_hll + num_bytes_packbits(subbucketsize, 2**bucketbits)
+        hll_b, hll_L = unpackbits(byte_array[start_hll:end_hll])
+        obj.hll = hll_L.astype(obj._hll_type)
+        bbit_b, bbit_L = unpackbits(byte_array[end_hll:end_bbit])
+        obj.bbit = bbit_L.astype(obj._subbucket_type)
+        return obj
     def triple_hash(self, item):
         '''Returns a triple i, val, aug hashed values, where i is bucketbits,
-        val is number of leading zeros in a 64-bit integer, and aug is the bits
+        val is the position of the leading one in a 64-bit integer, and aug is the bits
         to go in the subbuckets'''
 
-        y, h2 = mmh3.hash64(bytes(item))
+        y, h2 = mmh3.hash64(str(item).encode())
         #val = 64 + 1 - (y + 2**63).bit_length() # this is slightly wrong as it will with 1/2^64 probability give 65
         val = 64 + 1 - int(np.uint64(y)).bit_length()
         val = min(val, 2**self.bucketsize)
@@ -96,8 +167,10 @@ class HyperMinHash:
         estimator given here:
         http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=365694
         
-        Will try the HLL estimator, and if the value is above 40M ~ 2^25, switches
+        Will try the HLL estimator, and if the value is above 2^(10 + bucketsize), switches
         to MinHash
+
+        Also uses MinHash estimator if bucketsize = 0
         '''
 
         hll_count = hll_estimator(self.hll)
@@ -143,18 +216,23 @@ class HyperMinHash:
                 result.hll[i] = self.hll[i]
                 result.bbit[i] = self.bbit[i]
         return result
-    def intersection(self, other):
-        '''Intersects two HyperMinHash sketches and computes:
-                Intersection cardinality
-                Jaccard index
-                bucket matches
-                Union cardinality
-                '''
-        # Can only intersect if generation parameters wer e the same
+    def __eq__(self, other):
+        '''Returns True iff all parameters and buckets match'''
+        return ((self.bucketbits == other.bucketbits) and
+                (self.bucketsize == other.bucketsize) and
+                (self.subbucketsize == other.subbucketsize) and
+                (self.collision_correction == other.collision_correction) and
+                np.array_equal(self.hll, other.hll) and
+                np.array_equal(self.bbit, other.bbit))
+    def __ne__(self, other):
+        '''Returns False iff all parameters and buckets match'''
+        return not (self==other)
+    def jaccard(self, other):
+        '''Determines the Jaccard index of two sets using HyperMinHash sketches of them'''
+        # Can only intersect if generation parameters were the same
         assert(self.bucketbits == other.bucketbits)
         assert(self.bucketsize == other.bucketsize)
         assert(self.subbucketsize == other.subbucketsize)
-
         self_nonzeros = np.logical_or(self.hll != 0, self.bbit != 0)
         matches_with_zeros = np.logical_and(self.hll == other.hll, self.bbit == other.bbit)
         matches = np.logical_and(self_nonzeros, matches_with_zeros)
@@ -162,7 +240,6 @@ class HyperMinHash:
         match_num = sum(matches)
 
         union = self + other
-        union_cardinality = union.count()
 
         if self.collision_correction=="approx":
             collisions = float(collision_estimate_final(self.count(), other.count(), bucketsize=self.bucketsize, abb1=self.subbucketsize, bucketbits = self.bucketbits))
@@ -172,8 +249,22 @@ class HyperMinHash:
             collisions = 0
 
         intersect_size = match_num - collisions
-
         jaccard = intersect_size / union.filled_buckets()
+        return jaccard
+
+    def intersection(self, other):
+        '''Intersects two HyperMinHash sketches and computes:
+                Intersection cardinality
+                Jaccard index
+                bucket matches
+                Union cardinality
+                '''
+        union = self + other
+        union_cardinality = union.count()
+        jaccard = self.jaccard(other)
+
+        # Number of filled buckets
+        intersect_size = int(np.round(jaccard * union.filled_buckets()))
         return jaccard * union_cardinality, jaccard, intersect_size, union_cardinality
 
 def hll_estimator(buckets):
