@@ -228,7 +228,12 @@ class HyperMinHash:
         '''Returns False iff all parameters and buckets match'''
         return not (self==other)
     def jaccard(self, other):
-        '''Determines the Jaccard index of two sets using HyperMinHash sketches of them'''
+        '''Determines the Jaccard index of two sets using HyperMinHash sketches of them
+
+        Note that the Jaccard index is undefined when both sets are empty.
+        We choose to return a Jaccard index of 0 in that case, as this makes
+        the intersection computation return the expected value of 0.
+        '''
         # Can only intersect if generation parameters were the same
         assert(self.bucketbits == other.bucketbits)
         assert(self.bucketsize == other.bucketsize)
@@ -249,7 +254,11 @@ class HyperMinHash:
             collisions = 0
 
         intersect_size = match_num - collisions
-        jaccard = intersect_size / union.filled_buckets()
+        union_filled_buckets = union.filled_buckets()
+        if union_filled_buckets == 0:
+            jaccard = 0
+        else:
+            jaccard = intersect_size / union.filled_buckets()
         return jaccard
 
     def intersection(self, other):
