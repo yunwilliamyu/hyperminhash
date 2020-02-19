@@ -254,7 +254,7 @@ class HyperMinHash:
         if union_filled_buckets == 0:
             jaccard = 0
         else:
-            jaccard = intersect_size / union_filled_buckets()
+            jaccard = intersect_size / union_filled_buckets
         return jaccard
 
     def intersection(self, other):
